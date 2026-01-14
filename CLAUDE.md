@@ -110,22 +110,50 @@ python kafka_producer.py
 Runs the ingestion pipeline: authenticate → fetch → parse → publish to Kafka.
 Saves debug copy to `api_response_debug.json`.
 
-### Step 3: ClickHouse Setup (First Time Only)
+### Step 3: ClickHouse Setup
+
+**First Time Setup:**
 ```bash
 ./clickhouse_setup.sh
 ```
 Sets up ClickHouse using Docker (ports 8123 for HTTP, 9000 for native protocol).
 Verifies installation and displays connection details.
 
+**Important for WSL2 Users:**
+- Ensure Docker Desktop is running on Windows
+- Enable WSL2 integration: Docker Desktop → Settings → Resources → WSL Integration → Enable for your distro
+- Verify Docker is accessible: `docker --version`
+
+**Restarting After System Shutdown:**
+If Docker Desktop is closed or system restarted, simply start the existing container:
+```bash
+docker start clickhouse-server
+```
+Or re-run the setup script (it will detect and start the existing container):
+```bash
+./clickhouse_setup.sh
+```
+
+**Data Persistence:**
+All data in ClickHouse persists across container restarts. Data is only lost if you explicitly delete the container (`docker rm -f clickhouse-server`).
+
 ### Step 4: Load Data into ClickHouse
 ```bash
 python kafka_to_clickhouse.py
 ```
 Consumes from Kafka and loads flattened data into ClickHouse.
-Expected output:
-- 122 Kafka messages processed
-- ~21,000-35,000 rows inserted into `transaction_metrics` table
-- Progress displayed per message with hourly record count
+
+**Expected Behavior:**
+- Processes all available Kafka messages from topic `services_series_12days`
+- Displays progress for each message with time-series record count
+- Inserts data in batches of 5,000 rows
+- After consuming all messages, waits indefinitely for new messages (this is normal streaming consumer behavior)
+- Press **Ctrl+C** to stop the consumer gracefully (it will flush remaining buffered rows before exiting)
+
+**Expected Output:**
+- 122 Kafka messages processed (one per transaction/service endpoint)
+- Total rows inserted varies based on service activity (typically 8,000-35,000 rows)
+- Final summary shows: messages processed, time-series records extracted, ClickHouse rows inserted
 
 ## Configuration
 
@@ -185,26 +213,50 @@ python3 -c "from kafka import KafkaAdminClient; admin = KafkaAdminClient(bootstr
 
 ### ClickHouse Table Schema
 
-**Table:** `transaction_metrics` (35 columns, MergeTree engine, partitioned by month)
+**Table:** `transaction_metrics` (36 columns, MergeTree engine, partitioned by month)
 
-**Key columns:**
+**35 columns from Kafka data + 1 auto-generated:**
 - `transaction_name` - API endpoint identifier (e.g., "GET /api/users")
+- `transaction_id`, `application_id`, `application_name` - Service identifiers
 - `timestamp` - DateTime64(3) when metric was recorded
-- `avg_response_time` - Average response time in milliseconds
-- `total_count` - Total number of requests
-- `success_rate`, `error_rate` - Request success/error rates
-- `eb_allocated_percent`, `eb_consumed_percent` - Error budget metrics
+- `avg_response_time`, `sum_response_time` - Response time metrics (in seconds)
+- `total_count`, `success_count`, `error_count` - Request counts
+- `success_rate`, `error_rate` - Request success/error percentages
+- `eb_allocated_percent`, `eb_consumed_percent`, `eb_left_percent` - Error budget metrics
 - `percentile_25` through `percentile_99` - Response time percentiles
-- `timeliness_health`, `response_health`, `eb_health` - Health status indicators
+- `timeliness_health`, `response_health`, `eb_health` - Health status (HEALTHY/UNHEALTHY)
+- `eb_breached`, `response_breached` - Boolean breach indicators
+- `ingestion_time` - Auto-generated timestamp when row was inserted into ClickHouse
 
-### Interactive ClickHouse Client
+### Accessing ClickHouse
+
+**Web UI (Recommended):**
+Open in browser: `http://localhost:8123/play`
+- No authentication required (default user with empty password)
+- Interactive query interface with syntax highlighting
+- View query results in table format
+- Note: Large result sets (1000+ rows) are paginated
+
+**Command-Line Client:**
 ```bash
-# Access ClickHouse SQL client
+# Interactive mode
 docker exec -it clickhouse-server clickhouse-client
 
-# Once inside, run SQL queries:
+# Single query (use when running from scripts/automation)
+docker exec clickhouse-server clickhouse-client --query "SELECT COUNT(*) FROM transaction_metrics"
+```
+
+**Common Queries:**
+```sql
+-- Verify data loaded
 SELECT COUNT(*) FROM transaction_metrics;
+
+-- View table structure
 SHOW CREATE TABLE transaction_metrics;
+DESCRIBE transaction_metrics;
+
+-- Count unique transactions
+SELECT COUNT(DISTINCT transaction_name) FROM transaction_metrics;
 ```
 
 ### Common Query Examples
@@ -325,8 +377,36 @@ docker exec -it clickhouse-server clickhouse-client --query "DROP TABLE IF EXIST
   - Total ClickHouse rows inserted: ~21,000-35,000
 - Total time: ~30-60 seconds depending on data volume
 
+## Docker Management
+
+**Check ClickHouse Status:**
+```bash
+docker ps                           # View running containers
+docker ps -a                        # View all containers (including stopped)
+docker logs clickhouse-server       # View ClickHouse logs
+```
+
+**Start/Stop ClickHouse:**
+```bash
+docker start clickhouse-server      # Start existing container
+docker stop clickhouse-server       # Stop running container
+docker restart clickhouse-server    # Restart container
+```
+
+**Remove ClickHouse (WARNING: Deletes all data):**
+```bash
+docker rm -f clickhouse-server      # Remove container and all data
+```
+
+**Troubleshooting:**
+- If ClickHouse won't start: Check Docker Desktop is running on Windows
+- If ports are in use: Ensure no other services are using ports 8123 or 9000
+- If authentication fails: The setup script configures ClickHouse with empty password for default user
+
 ## Known Issues
 
 1. **SSL Verification Disabled** - Both modules use `verify=False` for HTTPS requests to work with sandbox certificates. This should be enabled for production with proper certificate validation.
 
 2. **Hardcoded Credentials** - Authentication credentials are embedded in source code. Consider using environment variables or secret management for production.
+
+3. **ClickHouse Version Compatibility** - The setup script has been updated (line 47) to include `-e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1` to support ClickHouse v25+ which requires explicit authentication configuration.

@@ -44,6 +44,7 @@ else
         --ulimit nofile=262144:262144 \
         -p 8123:8123 \
         -p 9000:9000 \
+        -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
         clickhouse/clickhouse-server
 
     echo "✓ ClickHouse container created and started"
@@ -77,7 +78,7 @@ fi
 # Test connection
 echo ""
 echo "Testing ClickHouse connection..."
-CLICKHOUSE_VERSION=$(curl -s http://localhost:8123/?query=SELECT%20version())
+CLICKHOUSE_VERSION=$(docker exec clickhouse-server clickhouse-client --query "SELECT version()" 2>/dev/null)
 
 if [ -n "$CLICKHOUSE_VERSION" ]; then
     echo "✓ Successfully connected to ClickHouse"
