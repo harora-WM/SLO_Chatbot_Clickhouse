@@ -31,6 +31,11 @@ wheels/
 api_response_debug.json
 service_health_response.json
 
+# Exported data files
+all_rows.txt
+data.csv
+data.json
+
 # IDE
 .vscode/
 .idea/

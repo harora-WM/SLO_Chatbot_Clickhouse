@@ -86,11 +86,18 @@ class KafkaClickHouseConsumer:
             transaction_id UInt32,
             application_id UInt32,
             application_name String,
+            alias String,
 
             -- Timestamp fields
             timestamp DateTime64(3),
             timestamp_str String,
             key String,
+
+            -- Metadata
+            timezone String,
+            no_data_found Bool,
+            index_type String,
+            sre_product String,
 
             -- Performance metrics
             sum_response_time Float64,
@@ -100,39 +107,85 @@ class KafkaClickHouseConsumer:
             error_count Float64,
             success_rate Float64,
             error_rate Float64,
+            total_data_points Float64,
 
-            -- SLO (Service Level Objective) metrics
+            -- SLO (Service Level Objective) metrics - Standard
             short_target_slo Float64,
             eb_allocated_percent Float64,
+            eb_allocated_count Int32,
             eb_consumed_percent Float64,
+            eb_consumed_count Int32,
+            eb_actual_consumed_percent Float64,
             eb_left_percent Float64,
+            eb_left_count Int32,
 
-            -- Response metrics
+            -- SLO (Service Level Objective) metrics - Aspirational
+            aspirational_slo Float64,
+            aspirational_eb_allocated_percent Float64,
+            aspirational_eb_allocated_count Int32,
+            aspirational_eb_consumed_percent Float64,
+            aspirational_eb_consumed_count Int32,
+            aspirational_eb_actual_consumed_percent Float64,
+            aspirational_eb_left_percent Float64,
+            aspirational_eb_left_count Int32,
+
+            -- Response metrics - Standard
             response_breach_count Float64,
             response_error_rate Float64,
             response_success_rate Float64,
+            response_slo Float64,
+            response_target_percent Float64,
+            response_allocated_percent Float64,
+            response_allocated_count Int32,
+            response_consumed_percent Float64,
+            response_consumed_count Int32,
+            response_actual_consumed_percent Float64,
+            response_left_percent Float64,
+            response_left_count Int32,
+
+            -- Response metrics - Aspirational
+            aspirational_response_slo Float64,
+            aspirational_response_target_percent Float64,
+            aspirational_response_allocated_percent Float64,
+            aspirational_response_allocated_count Int32,
+            aspirational_response_consumed_percent Float64,
+            aspirational_response_consumed_count Int32,
+            aspirational_response_actual_consumed_percent Float64,
+            aspirational_response_left_percent Float64,
+            aspirational_response_left_count Int32,
+
+            -- Timeliness metrics
+            timeliness_consumed_percent Float64,
+            aspirational_timeliness_consumed_percent Float64,
 
             -- Health indicators
             timeliness_health String,
             response_health String,
             eb_health String,
+            aspirational_response_health String,
+            aspirational_eb_health String,
+
+            -- Severity indicators (color codes)
+            timeliness_severity String,
+            response_severity String,
+            eb_severity String,
+            aspirational_response_severity String,
+            aspirational_eb_severity String,
 
             -- Breach flags
             eb_breached Bool,
             response_breached Bool,
+            eb_or_response_breached Bool,
 
             -- Response time percentiles
             percentile_25 Float64,
             percentile_50 Float64,
             percentile_75 Float64,
+            percentile_80 Float64,
+            percentile_85 Float64,
             percentile_90 Float64,
             percentile_95 Float64,
             percentile_99 Float64,
-
-            -- Metadata
-            timezone String,
-            index_type String,
-            sre_product String,
 
             -- Ingestion tracking
             ingestion_time DateTime DEFAULT now()
@@ -178,17 +231,27 @@ class KafkaClickHouseConsumer:
             # Extract percentiles (nested object)
             percentiles = series_item.get('avgPercentiles', {})
 
-            # Build row with all 35 columns (matching table schema order)
+            # Build row with all fields (matching table schema order)
             row = [
+                # Transaction identifiers
                 transaction_name,
                 series_item.get('transactionId', 0),
                 series_item.get('applicationId', 0),
                 series_item.get('applicationName', ''),
+                series_item.get('alias', ''),
 
+                # Timestamp fields
                 timestamp,
                 timestamp_str,
                 series_item.get('key', ''),
 
+                # Metadata
+                series_item.get('timezone', ''),
+                series_item.get('noDataFound', False),
+                series_item.get('index', ''),
+                series_item.get('sre_product', ''),
+
+                # Performance metrics
                 series_item.get('sumResponseTime', 0.0),
                 series_item.get('avgResponseTime', 0.0),
                 series_item.get('totalCount', 0.0),
@@ -196,33 +259,85 @@ class KafkaClickHouseConsumer:
                 series_item.get('errorCount', 0.0),
                 series_item.get('successRate', 0.0),
                 series_item.get('errorRate', 0.0),
+                series_item.get('totalDataPoints', 0.0),
 
+                # SLO metrics - Standard
                 series_item.get('shortTargetSLO', 0.0),
                 series_item.get('eBAllocatedPercent', 0.0),
+                series_item.get('eBAllocatedCount', 0),
                 series_item.get('eBConsumedPercent', 0.0),
+                series_item.get('eBConsumedCount', 0),
+                series_item.get('eBActualConsumedPercent', 0.0),
                 series_item.get('eBLeftPercent', 0.0),
+                series_item.get('eBLeftCount', 0),
 
+                # SLO metrics - Aspirational
+                series_item.get('aspirationalSLO', 0.0),
+                series_item.get('aspirationalEBAllocatedPercent', 0.0),
+                series_item.get('aspirationalEBAllocatedCount', 0),
+                series_item.get('aspirationalEBConsumedPercent', 0.0),
+                series_item.get('aspirationalEBConsumedCount', 0),
+                series_item.get('aspirationalEBActualConsumedPercent', 0.0),
+                series_item.get('aspirationalEBLeftPercent', 0.0),
+                series_item.get('aspirationalEBLeftCount', 0),
+
+                # Response metrics - Standard
                 series_item.get('responseBreachCount', 0.0),
                 series_item.get('responseErrorRate', 0.0),
                 series_item.get('responseSuccessRate', 0.0),
+                series_item.get('responseSlo', 0.0),
+                series_item.get('responseTargetPercent', 0.0),
+                series_item.get('responseAllocatedPercent', 0.0),
+                series_item.get('responseAllocatedCount', 0),
+                series_item.get('responseConsumedPercent', 0.0),
+                series_item.get('responseConsumedCount', 0),
+                series_item.get('responseActualConsumedPercent', 0.0),
+                series_item.get('responseLeftPercent', 0.0),
+                series_item.get('responseLeftCount', 0),
 
+                # Response metrics - Aspirational
+                series_item.get('aspirationalResponseSlo', 0.0),
+                series_item.get('aspirationalResponseTargetPercent', 0.0),
+                series_item.get('aspirationalResponseAllocatedPercent', 0.0),
+                series_item.get('aspirationalResponseAllocatedCount', 0),
+                series_item.get('aspirationalResponseConsumedPercent', 0.0),
+                series_item.get('aspirationalResponseConsumedCount', 0),
+                series_item.get('aspirationalResponseActualConsumedPercent', 0.0),
+                series_item.get('aspirationalResponseLeftPercent', 0.0),
+                series_item.get('aspirationalResponseLeftCount', 0),
+
+                # Timeliness metrics
+                series_item.get('timelinessConsumedPercent', 0.0),
+                series_item.get('aspirationalTimelinessConsumedPercent', 0.0),
+
+                # Health indicators
                 series_item.get('timelinessHealth', ''),
                 series_item.get('responseHealth', ''),
                 series_item.get('ebHealth', ''),
+                series_item.get('aspirationalResponseHealth', ''),
+                series_item.get('aspirationalEBHealth', ''),
 
+                # Severity indicators
+                series_item.get('timelinessSeverity', ''),
+                series_item.get('responseSeverity', ''),
+                series_item.get('ebSeverity', ''),
+                series_item.get('aspirationalResponseSeverity', ''),
+                series_item.get('aspirationalEBSeverity', ''),
+
+                # Breach flags
                 series_item.get('ebBreached', False),
                 series_item.get('responseBreached', False),
+                series_item.get('ebOrResponseBreached', False),
 
+                # Response time percentiles
                 percentiles.get('25.0', 0.0),
                 percentiles.get('50.0', 0.0),
                 percentiles.get('75.0', 0.0),
+                percentiles.get('80.0', 0.0),
+                percentiles.get('85.0', 0.0),
                 percentiles.get('90.0', 0.0),
                 percentiles.get('95.0', 0.0),
-                percentiles.get('99.0', 0.0),
-
-                series_item.get('timezone', ''),
-                series_item.get('index', ''),
-                series_item.get('sre_product', '')
+                percentiles.get('99.0', 0.0)
             ]
             rows.append(row)
 
@@ -246,17 +361,48 @@ class KafkaClickHouseConsumer:
                 'transaction_metrics',
                 rows,
                 column_names=[
-                    'transaction_name', 'transaction_id', 'application_id', 'application_name',
+                    # Transaction identifiers
+                    'transaction_name', 'transaction_id', 'application_id', 'application_name', 'alias',
+                    # Timestamp fields
                     'timestamp', 'timestamp_str', 'key',
+                    # Metadata
+                    'timezone', 'no_data_found', 'index_type', 'sre_product',
+                    # Performance metrics
                     'sum_response_time', 'avg_response_time', 'total_count', 'success_count',
-                    'error_count', 'success_rate', 'error_rate',
-                    'short_target_slo', 'eb_allocated_percent', 'eb_consumed_percent', 'eb_left_percent',
+                    'error_count', 'success_rate', 'error_rate', 'total_data_points',
+                    # SLO metrics - Standard
+                    'short_target_slo', 'eb_allocated_percent', 'eb_allocated_count',
+                    'eb_consumed_percent', 'eb_consumed_count', 'eb_actual_consumed_percent',
+                    'eb_left_percent', 'eb_left_count',
+                    # SLO metrics - Aspirational
+                    'aspirational_slo', 'aspirational_eb_allocated_percent', 'aspirational_eb_allocated_count',
+                    'aspirational_eb_consumed_percent', 'aspirational_eb_consumed_count',
+                    'aspirational_eb_actual_consumed_percent', 'aspirational_eb_left_percent',
+                    'aspirational_eb_left_count',
+                    # Response metrics - Standard
                     'response_breach_count', 'response_error_rate', 'response_success_rate',
+                    'response_slo', 'response_target_percent', 'response_allocated_percent',
+                    'response_allocated_count', 'response_consumed_percent', 'response_consumed_count',
+                    'response_actual_consumed_percent', 'response_left_percent', 'response_left_count',
+                    # Response metrics - Aspirational
+                    'aspirational_response_slo', 'aspirational_response_target_percent',
+                    'aspirational_response_allocated_percent', 'aspirational_response_allocated_count',
+                    'aspirational_response_consumed_percent', 'aspirational_response_consumed_count',
+                    'aspirational_response_actual_consumed_percent', 'aspirational_response_left_percent',
+                    'aspirational_response_left_count',
+                    # Timeliness metrics
+                    'timeliness_consumed_percent', 'aspirational_timeliness_consumed_percent',
+                    # Health indicators
                     'timeliness_health', 'response_health', 'eb_health',
-                    'eb_breached', 'response_breached',
-                    'percentile_25', 'percentile_50', 'percentile_75', 'percentile_90',
-                    'percentile_95', 'percentile_99',
-                    'timezone', 'index_type', 'sre_product'
+                    'aspirational_response_health', 'aspirational_eb_health',
+                    # Severity indicators
+                    'timeliness_severity', 'response_severity', 'eb_severity',
+                    'aspirational_response_severity', 'aspirational_eb_severity',
+                    # Breach flags
+                    'eb_breached', 'response_breached', 'eb_or_response_breached',
+                    # Response time percentiles
+                    'percentile_25', 'percentile_50', 'percentile_75', 'percentile_80',
+                    'percentile_85', 'percentile_90', 'percentile_95', 'percentile_99'
                 ]
             )
             return True
@@ -340,7 +486,7 @@ def main():
     # Configuration
     KAFKA_BOOTSTRAP_SERVERS = ['ec2-47-129-241-41.ap-southeast-1.compute.amazonaws.com:9092']
     KAFKA_TOPIC = 'services_series_12days'
-    KAFKA_GROUP_ID = 'clickhouse_consumer_group'
+    KAFKA_GROUP_ID = 'clickhouse_consumer_group_v2'  # Changed to v2 to re-consume all messages
 
     CLICKHOUSE_HOST = 'localhost'
     CLICKHOUSE_PORT = 8123
