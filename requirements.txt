@@ -1,4 +1,55 @@
+# ============================================================================
+# SLO Monitoring System - Unified Dependencies
+# ============================================================================
+# This file contains dependencies for both the data pipeline and chatbot
+# Install with: pip install -r requirements.txt
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# Data Pipeline Dependencies
+# ----------------------------------------------------------------------------
+# HTTP client for API calls
 requests==2.31.0
 urllib3==2.1.0
+
+# Kafka client (use kafka-python-ng for Python 3.12+ compatibility)
 kafka-python-ng==2.2.3
+
+# ClickHouse Python client (shared by both projects)
 clickhouse-connect==0.7.0
+
+# ----------------------------------------------------------------------------
+# SLO Chatbot Dependencies
+# ----------------------------------------------------------------------------
+# Web UI framework
+streamlit==1.31.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Data processing
+pandas==2.2.0
+
+# AWS Bedrock for Claude Sonnet 4.5
+boto3==1.34.34
+botocore==1.34.34
+
+# Date/time utilities
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Visualization
+plotly==5.18.0
+altair==5.2.0
+
+# Type hints
+typing-extensions==4.9.0
+
+# ----------------------------------------------------------------------------
+# Optional Dependencies
+# ----------------------------------------------------------------------------
+# OpenSearch (for future real-time integration)
+# opensearch-py==2.4.2
+
+# DuckDB (deprecated - using ClickHouse now)
+# duckdb==0.10.0

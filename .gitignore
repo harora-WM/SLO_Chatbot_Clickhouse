@@ -39,6 +39,10 @@ all_rows.txt
 data.csv
 data.json
 
+# Data directory (local debugging/temporary files)
+data/
+!docs/
+
 # IDE
 .vscode/
 .idea/
