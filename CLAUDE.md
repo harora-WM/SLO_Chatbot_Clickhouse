@@ -13,10 +13,12 @@ slo-monitoring/
 │   ├── .env          # AWS credentials (copy from .env.example)
 │   └── .env.example  # Configuration template
 ├── docs/              # Shared documentation
-├── venv/              # Unified virtual environment (root level)
+├── venv/              # Unified virtual environment (root level, git-ignored)
 ├── requirements.txt   # Unified dependencies (root level)
 └── README.md          # User guide
 ```
+
+**IMPORTANT:** The `venv/` directory is git-ignored and must be created locally by each user.
 
 **Architecture:** Pipeline writes to ClickHouse (shared data layer), Chatbot reads from ClickHouse.
 
@@ -601,13 +603,21 @@ git push origin main
 3. **Fixed Time Range** - Hardcoded Dec 31, 2025 → Jan 12, 2026 in `pipeline/kafka_producer.py:48-49`
 4. **WSL2 Docker Dependency** - ClickHouse setup assumes WSL2 with Docker Desktop on Windows
 5. **Streamlit Cache** - If code changes don't reflect, clear: `find . -type d -name "__pycache__" -exec rm -r {} +`
-6. **Pending Git Cleanup** - Several deleted chatbot/*.md files in staging area need to be committed
 
 ## Project-Specific Documentation
 
 For detailed documentation:
 
 - **Pipeline:** See inline comments in `pipeline/*.py`
-- **Chatbot:** See `chatbot/CLAUDE.md` for detailed patterns and `chatbot/README.md` for user guide
 - **Architecture:** See `README.md` for system overview
-- **Migration:** See `chatbot/CLICKHOUSE_MIGRATION.md` and `chatbot/MIGRATION_COMPLETE.md`
+- **Migration:** See `docs/CLICKHOUSE_MIGRATION.md` and `docs/MIGRATION_COMPLETE.md`
+- **Quick Start:** See `docs/CHATBOT_QUICKSTART.md` for rapid setup
+- **Troubleshooting:** See `docs/TROUBLESHOOTING.md` for common issues
+
+## Important Notes for Claude Code
+
+1. **Never commit venv/** - The virtual environment is git-ignored and should remain local only
+2. **Unified structure** - Single venv and requirements.txt at root level serves both pipeline and chatbot
+3. **ClickHouse is shared** - Both pipeline (writes) and chatbot (reads) use the same ClickHouse container
+4. **chatbot/run.sh is smart** - Automatically detects venv location (chatbot/venv or ../venv)
+5. **Documentation is centralized** - All docs are in docs/ folder, not scattered in project directories
