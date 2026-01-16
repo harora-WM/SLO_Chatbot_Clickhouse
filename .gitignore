@@ -2,9 +2,12 @@
 venv/
 env/
 ENV/
+**/venv/
+**/env/
 
 # Python cache
 __pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -46,3 +49,8 @@ data.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment variables
+.env
+**/.env
+.env.local
