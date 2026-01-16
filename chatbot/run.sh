@@ -5,15 +5,21 @@ echo "   SLO Chatbot - Starting..."
 echo "=================================================="
 echo ""
 
-# Activate virtual environment
-if [ ! -d "venv" ]; then
+# Activate virtual environment (check both chatbot and root directories)
+if [ -d "venv" ]; then
+    echo "✅ Activating virtual environment (chatbot/venv)..."
+    source venv/bin/activate
+elif [ -d "../venv" ]; then
+    echo "✅ Activating virtual environment (root venv)..."
+    source ../venv/bin/activate
+else
     echo "❌ Virtual environment not found!"
-    echo "Please run: python3 -m venv venv && venv/bin/pip install -r requirements.txt"
+    echo "Please run from repository root:"
+    echo "  python3 -m venv venv"
+    echo "  source venv/bin/activate"
+    echo "  pip install -r requirements.txt"
     exit 1
 fi
-
-echo "✅ Activating virtual environment..."
-source venv/bin/activate
 
 echo "✅ Starting Streamlit app..."
 echo ""

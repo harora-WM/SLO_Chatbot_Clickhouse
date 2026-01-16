@@ -32,7 +32,8 @@ AI-powered monitoring application using Claude Sonnet 4.5 to analyze SLO complia
 slo-monitoring/
 ├── README.md                    # This file
 ├── CLAUDE.md                   # Developer guide for Claude Code
-├── requirements.txt            # Unified dependencies
+├── requirements.txt            # Unified dependencies (root level)
+├── venv/                       # Unified virtual environment (root level)
 ├── .gitignore
 │
 ├── pipeline/                   # Data ingestion pipeline
@@ -43,8 +44,9 @@ slo-monitoring/
 │
 ├── chatbot/                    # SLO monitoring chatbot
 │   ├── app.py                 # Streamlit web UI
-│   ├── requirements.txt       # Chatbot-specific deps
+│   ├── run.sh                 # Helper script to start chatbot
 │   ├── .env.example          # Configuration template
+│   ├── .env                  # AWS credentials (copy from .env.example)
 │   │
 │   ├── agent/                # Claude integration
 │   │   ├── claude_client.py  # AWS Bedrock client
@@ -63,8 +65,7 @@ slo-monitoring/
 │   │   ├── config.py        # Configuration management
 │   │   └── logger.py        # Logging setup
 │   │
-│   └── tests/               # Test files
-│       └── test_clickhouse_comprehensive.py
+│   └── test_clickhouse_comprehensive.py  # Test suite (38 tests)
 │
 └── docs/                    # Documentation
     └── OFFSET_EXPLORER_GUIDE.md # Kafka viewer guide
@@ -96,12 +97,15 @@ docker ps | grep clickhouse
 ### Step 2: Install Dependencies
 
 ```bash
-# Create virtual environment (recommended: one venv for both projects)
+# Create unified virtual environment at repository root
 python3 -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install all dependencies
+# Install all dependencies (covers both pipeline and chatbot)
 pip install -r requirements.txt
+
+# Verify installation
+pip list | grep -E 'streamlit|clickhouse|kafka|boto3'
 ```
 
 ### Step 3: Run Data Pipeline
@@ -133,8 +137,9 @@ cp .env.example .env
 #   AWS_ACCESS_KEY_ID=your_key
 #   AWS_SECRET_ACCESS_KEY=your_secret
 
-# Run the chatbot
+# Run the chatbot (ensure root venv is activated)
 streamlit run app.py
+# Or use helper script: ./run.sh
 
 # Access at: http://localhost:8501
 ```
@@ -402,8 +407,9 @@ docker exec clickhouse-server clickhouse-client --query "SELECT MIN(timestamp), 
 The refactoring maintains all import paths. If you encounter issues:
 
 ```bash
-# Ensure you're in the correct directory
+# Ensure you're in the correct directory and venv is activated
 cd slo-monitoring  # Repository root
+source venv/bin/activate
 
 # Run pipeline from root
 python pipeline/kafka_producer.py
@@ -411,6 +417,7 @@ python pipeline/kafka_producer.py
 # Run chatbot from its directory
 cd chatbot
 streamlit run app.py
+# Or: ./run.sh (automatically finds venv)
 ```
 
 ## 📚 Documentation
@@ -433,9 +440,11 @@ streamlit run app.py
 # Terminal 1: Ensure ClickHouse is running
 docker start clickhouse-server
 
-# Terminal 2: Run chatbot
+# Terminal 2: Run chatbot (with venv activated)
+source venv/bin/activate  # From repository root
 cd chatbot
 streamlit run app.py
+# Or simply: cd chatbot && ./run.sh
 ```
 
 ### Streamlit Cloud

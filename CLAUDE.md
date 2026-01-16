@@ -10,12 +10,41 @@ This repository contains a **complete SLO monitoring system** with a clean, orga
 slo-monitoring/
 ├── pipeline/          # Data ingestion (Kafka → ClickHouse)
 ├── chatbot/           # AI-powered monitoring (Claude Sonnet 4.5)
+│   ├── .env          # AWS credentials (copy from .env.example)
+│   └── .env.example  # Configuration template
 ├── docs/              # Shared documentation
-├── requirements.txt   # Unified dependencies
+├── venv/              # Unified virtual environment (root level)
+├── requirements.txt   # Unified dependencies (root level)
 └── README.md          # User guide
 ```
 
 **Architecture:** Pipeline writes to ClickHouse (shared data layer), Chatbot reads from ClickHouse.
+
+## Quick Reference
+
+**Most common tasks:**
+```bash
+# Setup (first time only)
+python3 -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Start ClickHouse
+docker start clickhouse-server
+
+# Run full pipeline (from root, with venv activated)
+python pipeline/kafka_producer.py && python pipeline/kafka_to_clickhouse.py
+
+# Start chatbot (from root)
+cd chatbot && streamlit run app.py
+# Or use helper script: cd chatbot && ./run.sh
+
+# Run tests (from chatbot directory)
+cd chatbot && python test_clickhouse_comprehensive.py
+
+# Check data
+docker exec clickhouse-server clickhouse-client --query "SELECT COUNT(*) FROM transaction_metrics"
+```
 
 ## Quick Start Commands
 
@@ -38,7 +67,12 @@ docker exec clickhouse-server clickhouse-client --query "SELECT COUNT(*) FROM tr
 # From repository root
 cd chatbot
 cp .env.example .env  # Add AWS credentials
+
+# Option 1: Direct run
 streamlit run app.py  # Access at http://localhost:8501
+
+# Option 2: Using helper script (checks venv first)
+./run.sh
 
 # Test
 python test_clickhouse_comprehensive.py  # Expected: 38/38 passed
@@ -53,10 +87,16 @@ docker ps | grep clickhouse
 docker exec -it clickhouse-server clickhouse-client
 # Web UI: http://localhost:8123/play
 
-# Install dependencies (unified)
+# Install dependencies (unified at root level)
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+
+# Verify installation
+pip list | grep -E 'streamlit|clickhouse|kafka|boto3'
+
+# Activate existing venv (for new terminal sessions)
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
 # Kafka connectivity test
 python3 -c "from kafka import KafkaAdminClient; admin = KafkaAdminClient(bootstrap_servers=['ec2-47-129-241-41.ap-southeast-1.compute.amazonaws.com:9092']); print('Connected:', admin._client.cluster.brokers())"
@@ -76,10 +116,17 @@ python3 -c "from kafka import KafkaAdminClient; admin = KafkaAdminClient(bootstr
 
 **chatbot/** - SLO monitoring application
 - `app.py` - Streamlit web UI
+- `run.sh` - Helper script to start chatbot (checks venv)
 - `agent/` - Claude Sonnet 4.5 integration (AWS Bedrock)
-- `analytics/` - 20 analytics functions (SLO, burn rate, degradation, predictions)
+  - `claude_client.py` - AWS Bedrock client with DateTimeEncoder
+  - `function_tools.py` - FunctionExecutor mapping 20 tools to analytics modules
+- `analytics/` - 20 analytics functions across 4 modules
+  - `metrics.py` - Core metrics (13 functions: burn rate, health scores, P95/P99)
+  - `slo_calculator.py` - SLO calculations (4 functions: SLI, violations, gaps)
+  - `degradation_detector.py` - Week-over-week degradation detection
+  - `trend_analyzer.py` - ML predictions (6 functions: error/latency/volume trends)
 - `data/database/clickhouse_manager.py` - Read-only ClickHouse client
-- `utils/` - Config, logging
+- `utils/` - Config (env vars), logging
 - **Runs:** Continuously (Streamlit server)
 - **Input:** Queries ClickHouse
 
@@ -315,6 +362,9 @@ cd chatbot
 python test_clickhouse_comprehensive.py
 # Expected: 38/38 passed
 
+# Alternative: Run from root directory
+# python chatbot/test_clickhouse_comprehensive.py
+
 # Test specific function
 python3 -c "
 from analytics.metrics import MetricsAggregator
@@ -322,6 +372,10 @@ from data.database.clickhouse_manager import ClickHouseManager
 m = MetricsAggregator(ClickHouseManager())
 print(len(m.get_services_by_burn_rate(limit=10)))
 "
+
+# Other test files
+python test_clickhouse_migration.py  # Migration validation
+python test_system.py                # System integration tests
 ```
 
 ## Common Issues
@@ -354,7 +408,7 @@ python pipeline/kafka_to_clickhouse.py
 # Drop table (WARNING: deletes all data)
 docker exec clickhouse-server clickhouse-client --query "DROP TABLE IF EXISTS transaction_metrics"
 
-# Change consumer group in pipeline/kafka_to_clickhouse.py (~line 490)
+# Change consumer group in pipeline/kafka_to_clickhouse.py (line 489)
 # KAFKA_GROUP_ID = 'clickhouse_consumer_group_v3'  # Increment version
 
 # Re-run to recreate table
@@ -365,13 +419,53 @@ python pipeline/kafka_to_clickhouse.py
 
 **Symptom:** `kafka_to_clickhouse.py` doesn't insert data
 
-**Solution:** Change `KAFKA_GROUP_ID` in `pipeline/kafka_to_clickhouse.py:490`:
+**Solution:** Change `KAFKA_GROUP_ID` in `pipeline/kafka_to_clickhouse.py:489`:
 
 ```python
 KAFKA_GROUP_ID = 'clickhouse_consumer_group_v3'  # Was v2, now v3
 ```
 
 This forces re-consumption from beginning.
+
+### Issue: Virtual Environment Not Found
+
+**Symptom:** `run.sh` fails with "Virtual environment not found"
+
+**Solution:** Create unified venv at repository root (recommended structure):
+```bash
+# Navigate to repository root
+cd /path/to/slo-monitoring
+
+# Create virtual environment at root level
+python3 -m venv venv
+
+# Activate and install dependencies
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Verify installation
+pip list | grep -E 'streamlit|clickhouse|kafka|boto3'
+
+# Now run.sh will automatically find the venv
+cd chatbot && ./run.sh
+```
+
+### Issue: Import Errors in Chatbot
+
+**Symptom:** `ModuleNotFoundError` when running chatbot tests
+
+**Solution:** Ensure you're in the correct directory and root venv is activated:
+```bash
+# Activate root venv first (from repository root)
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# Then run tests from chatbot directory
+cd chatbot
+python test_clickhouse_comprehensive.py
+
+# Or in one line from root
+source venv/bin/activate && cd chatbot && python test_clickhouse_comprehensive.py
+```
 
 ## Development Workflows
 
@@ -385,7 +479,7 @@ python pipeline/kafka_producer.py
 docker exec clickhouse-server clickhouse-client --query "DROP TABLE IF EXISTS transaction_metrics"
 
 # 3. Change consumer group ID (if needed)
-# Edit pipeline/kafka_to_clickhouse.py:490
+# Edit pipeline/kafka_to_clickhouse.py:489
 
 # 4. Re-load to ClickHouse
 python pipeline/kafka_to_clickhouse.py  # Ctrl+C after 122 messages
@@ -467,13 +561,38 @@ LIMIT 10
 - Chatbot details: `chatbot/README.md`, `chatbot/QUICKSTART.md`
 
 **Configuration:**
-- Dependencies: `requirements.txt` (root, unified)
+- Dependencies: `requirements.txt` (root level, unified for both projects)
+- Virtual environment: `venv/` (root level, shared)
 - Pipeline config: Hardcoded in `pipeline/*.py`
-- Chatbot config: `chatbot/.env`
+- Chatbot config: `chatbot/.env` (AWS credentials, ClickHouse settings)
 
 **Data files:** (git-ignored)
 - Debug files: `data/` directory
 - Temporary files: Filtered by `.gitignore`
+
+## Git Workflow
+
+### Committing Changes
+
+The repository is tracked with git. When working on features:
+
+```bash
+# Check status
+git status
+
+# Stage specific files
+git add pipeline/kafka_producer.py
+git add chatbot/analytics/metrics.py
+
+# Or stage all changes
+git add .
+
+# Commit with descriptive message
+git commit -m "Add new burn rate calculation function"
+
+# Push to remote (if configured)
+git push origin main
+```
 
 ## Known Issues
 
@@ -482,6 +601,7 @@ LIMIT 10
 3. **Fixed Time Range** - Hardcoded Dec 31, 2025 → Jan 12, 2026 in `pipeline/kafka_producer.py:48-49`
 4. **WSL2 Docker Dependency** - ClickHouse setup assumes WSL2 with Docker Desktop on Windows
 5. **Streamlit Cache** - If code changes don't reflect, clear: `find . -type d -name "__pycache__" -exec rm -r {} +`
+6. **Pending Git Cleanup** - Several deleted chatbot/*.md files in staging area need to be committed
 
 ## Project-Specific Documentation
 

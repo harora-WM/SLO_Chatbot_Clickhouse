@@ -44,7 +44,10 @@ The fixes are now in place. Just:
 1. **Restart the Streamlit app**:
    ```bash
    # Stop current session (Ctrl+C)
+   # From chatbot directory
+   cd chatbot
    ./run.sh
+   # Or: streamlit run app.py
    ```
 
 2. **Try fetching data again**:
@@ -84,7 +87,12 @@ If the issue persists:
 Run the debug script to identify the exact issue:
 
 ```bash
-venv/bin/python debug_opensearch.py
+# From repository root with venv activated
+source venv/bin/activate
+python chatbot/debug_opensearch.py
+
+# Or directly
+venv/bin/python chatbot/debug_opensearch.py
 ```
 
 This will:

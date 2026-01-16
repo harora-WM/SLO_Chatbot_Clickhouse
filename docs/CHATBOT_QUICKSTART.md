@@ -31,17 +31,24 @@ docker exec clickhouse-server clickhouse-client --query "SELECT COUNT(*) FROM tr
 ### 2. Activate Environment
 
 ```bash
-# Navigate to project directory
-cd /path/to/SLO_Chatbot_Latest-v1
+# Navigate to repository root (where venv/ and requirements.txt are located)
+cd /path/to/slo-monitoring
 
-# Activate virtual environment
+# Activate unified virtual environment
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 ### 3. Run the Chatbot
 
 ```bash
+# Navigate to chatbot directory
+cd chatbot
+
+# Run directly
 streamlit run app.py
+
+# Or use helper script (automatically finds venv)
+./run.sh
 ```
 
 Open browser to: **http://localhost:8501**
